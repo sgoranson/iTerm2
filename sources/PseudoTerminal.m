@@ -357,7 +357,7 @@ static NSRect iTermRectCenteredVerticallyWithinRect(NSRect frameToCenter, NSRect
 
     // Number of tabs since last change.
     NSInteger _previousNumberOfTabs;
-    
+
     // The window restoration completion block was called but windowDidDecodeRestorableState:
     // has not yet been called.
     BOOL _expectingDecodeOfRestorableState;
@@ -403,7 +403,6 @@ static NSRect iTermRectCenteredVerticallyWithinRect(NSRect frameToCenter, NSRect
 
         default:
             return (mask |
-                    NSTitledWindowMask |
                     NSClosableWindowMask |
                     NSMiniaturizableWindowMask |
                     NSResizableWindowMask |
