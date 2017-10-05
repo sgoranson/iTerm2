@@ -110,7 +110,6 @@ typedef struct iTermTextColorContext {
     NSColor *backgroundColor;
     NSColor *previousBackgroundColor;
     CGFloat minimumContrast;
-    BOOL haveUnderlinedHostname;
     NSColor *previousForegroundColor;
 } iTermTextColorContext;
 
@@ -388,7 +387,7 @@ typedef struct iTermTextColorContext {
 
     // Now iterate over the lines and paint the characters.
     CGContextRef ctx = (CGContextRef)[[NSGraphicsContext currentContext] graphicsPort];
-    if (self.minimumContrast > 0 || self.colorMap.mutingAmount > 0 || self.colorMap.dimmingAmount > 0) {
+    if ([self textAppearanceDependsOnBackgroundColor]) {
         [self drawForegroundForBackgroundRunArrays:backgroundRunArrays
                                                ctx:ctx];
     } else {
@@ -418,6 +417,25 @@ typedef struct iTermTextColorContext {
     if (self.copyMode) {
         [self drawCopyModeCursor];
     }
+}
+
+- (BOOL)textAppearanceDependsOnBackgroundColor {
+    if (self.minimumContrast > 0) {
+        return YES;
+    }
+    if (self.colorMap.mutingAmount > 0) {
+        return YES;
+    }
+    if (self.colorMap.dimmingAmount > 0) {
+        return YES;
+    }
+    if (self.thinStrokes == iTermThinStrokesSettingDarkBackgroundsOnly) {
+        return YES;
+    }
+    if (self.thinStrokes == iTermThinStrokesSettingRetinaDarkBackgroundsOnly && _isRetina) {
+        return YES;
+    }
+    return NO;
 }
 
 #pragma mark - Drawing: Background
@@ -1199,6 +1217,9 @@ typedef struct iTermTextColorContext {
     size_t length = numCodes;
     [self selectFont:font inContext:ctx];
     CGContextSetFillColorSpace(ctx, CGColorGetColorSpace(color));
+    if (CGColorGetAlpha(color) < 1) {
+        CGContextSetBlendMode(ctx, kCGBlendModeSourceAtop);
+    }
     CGContextSetFillColor(ctx, components);
 
     double y = point.y + _cellSize.height + _baselineOffset;
@@ -1237,6 +1258,9 @@ typedef struct iTermTextColorContext {
 
     if (useThinStrokes) {
         CGContextSetFontSmoothingStyle(ctx, savedFontSmoothingStyle);
+    }
+    if (CGColorGetAlpha(color) < 1) {
+        CGContextSetBlendMode(ctx, kCGBlendModeNormal);
     }
 
     return length;
@@ -1555,7 +1579,7 @@ static NSColor *iTermTextDrawingHelperGetTextColor(screen_char_t *c,
         // Black-on-yellow search result.
         rawColor = [NSColor colorWithCalibratedRed:0 green:0 blue:0 alpha:1];
         context->havePreviousCharacterAttributes = NO;
-    } else if (inUnderlinedRange && !context->haveUnderlinedHostname) {
+    } else if (inUnderlinedRange) {
         // Blue link text.
         rawColor = [context->colorMap colorForKey:kColorMapLink];
         context->havePreviousCharacterAttributes = NO;
@@ -1865,7 +1889,6 @@ static BOOL iTermTextDrawingHelperIsCharacterDrawable(screen_char_t *c,
         .havePreviousCharacterAttributes = NO,
         .backgroundColor = backgroundColor,
         .minimumContrast = _minimumContrast,
-        .haveUnderlinedHostname = _haveUnderlinedHostname,
         .previousForegroundColor = nil,
     };
     NSDictionary *previousImageAttributes = nil;

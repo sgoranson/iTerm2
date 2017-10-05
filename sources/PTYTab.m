@@ -1007,9 +1007,30 @@ static void SetAgainstGrainDim(BOOL isVertical, NSSize *dest, CGFloat value) {
                       verticalDir:(BOOL)verticalDir
                             after:(BOOL)after {
     NSArray<PTYSession *> *sessions = [self sessionsAdjacentToSession:session verticalDir:verticalDir after:after];
-    return [sessions maxWithComparator:^NSComparisonResult(PTYSession *a, PTYSession *b) {
-        return [a.activityCounter compare:b.activityCounter];
-    }];
+    if (sessions.count) {
+        return [sessions maxWithComparator:^NSComparisonResult(PTYSession *a, PTYSession *b) {
+            return [a.activityCounter compare:b.activityCounter];
+        }];
+    } else {
+        sessions = [self sessionsInProjectionOfSession:session verticalDirection:verticalDir after:!after];
+        NSArray<PTYSession *> *wraparounds = [sessions mininumsWithComparator:^NSComparisonResult(PTYSession *a, PTYSession *b) {
+            NSRect aRect = [root_ convertRect:a.view.frame fromView:a.view.superview];
+            NSRect bRect = [root_ convertRect:b.view.frame fromView:b.view.superview];
+            if (verticalDir) {
+                SwapSize(&aRect.size);
+                SwapPoint(&aRect.origin);
+                SwapSize(&bRect.size);
+                SwapPoint(&bRect.origin);
+            }
+
+            const CGFloat bLeft = after ? NSMinX(bRect) : -NSMaxX(bRect);
+            const CGFloat aLeft = after ? NSMinX(aRect) : -NSMaxX(aRect);
+            return [@(aLeft) compare:@(bLeft)];
+        }];
+        return [wraparounds maxWithComparator:^NSComparisonResult(PTYSession *a, PTYSession *b) {
+            return [a.activityCounter compare:b.activityCounter];
+        }];
+    }
 }
 
 - (PTYSession*)sessionLeftOf:(PTYSession*)session {
@@ -2152,7 +2173,14 @@ static void SetAgainstGrainDim(BOOL isVertical, NSSize *dest, CGFloat value) {
         }
     }
     if (count > 0) {
-        return sum / count;
+        if (@available(macOS 10.13, *)) {
+            // Issue 6115. It turns red for values over 26. When I drop 10.12 support I can adjust
+            // the slider to not go above 26. But it's super slow before you get
+          // to 26, so let's limit it to 24. Issue 6138.
+            return MIN(24, sum / count);
+        } else {
+            return sum / count;
+        }
     } else {
         // This shouldn't actually happen, but better safe than divide by zero.
         return 2.0;
@@ -3609,10 +3637,10 @@ static void SetAgainstGrainDim(BOOL isVertical, NSSize *dest, CGFloat value) {
 // This computes what to do and returns a block that actually does it. But if
 // it's not allowed, then it returns null. This combines the "can move" with
 // the "move" into a single function.
-- (void (^)())blockToMoveView:(NSView *)view
-                      inSplit:(NSView *)possibleSplit
-                 horizontally:(BOOL)horizontally
-                           by:(int)direction {
+- (void (^)(void))blockToMoveView:(NSView *)view
+                          inSplit:(NSView *)possibleSplit
+                     horizontally:(BOOL)horizontally
+                               by:(int)direction {
     if (![possibleSplit isKindOfClass:[PTYSplitView class]] ||
         possibleSplit.subviews.count == 1) {
         return NULL;
@@ -3672,7 +3700,7 @@ static void SetAgainstGrainDim(BOOL isVertical, NSSize *dest, CGFloat value) {
     }
 
     // It would be ok to move the divider. Return a block that updates views' frames.
-    void (^block)() = ^void() {
+    void (^block)(void) = ^void() {
         [self splitView:split draggingWillBeginOfSplit:splitterIndex];
         before.frame = beforeFrame;
         after.frame = afterFrame;
@@ -3686,10 +3714,10 @@ static void SetAgainstGrainDim(BOOL isVertical, NSSize *dest, CGFloat value) {
          inSplit:(NSView *)possibleSplit
     horizontally:(BOOL)horizontally
               by:(int)direction {
-    void (^block)() = [self blockToMoveView:view
-                                    inSplit:possibleSplit
-                               horizontally:horizontally
-                                         by:direction];
+    void (^block)(void) = [self blockToMoveView:view
+                                        inSplit:possibleSplit
+                                   horizontally:horizontally
+                                             by:direction];
     if (block) {
         block();
     }
@@ -3699,10 +3727,10 @@ static void SetAgainstGrainDim(BOOL isVertical, NSSize *dest, CGFloat value) {
             inSplit:(NSView *)possibleSplit
        horizontally:(BOOL)horizontally
                  by:(int)direction {
-    void (^block)() = [self blockToMoveView:view
-                                    inSplit:possibleSplit
-                               horizontally:horizontally
-                                         by:direction];
+    void (^block)(void) = [self blockToMoveView:view
+                                        inSplit:possibleSplit
+                                   horizontally:horizontally
+                                             by:direction];
     return block != nil;
 }
 
